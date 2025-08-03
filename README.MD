@@ -1,59 +1,84 @@
-# OpenAI Whisper Docker Image (GPU Accelerated)
+# Audio Transcription Pipeline with OpenAI Whisper
 
-This Docker image provides a convenient environment for running OpenAI Whisper, a powerful automatic speech recognition (ASR) system. It is based on the latest Ubuntu image and includes the necessary dependencies for running Whisper seamlessly.
+An automated pipeline that processes WAV audio files through enhancement and transcription using OpenAI Whisper. Optimizes field recordings for speech recognition and outputs text transcriptions.
 
-## Prerequisites
+## What It Does
 
-Before you can use this Docker image, you need to have Docker installed on your system.
+1. **Audio Enhancement**: Normalizes levels, filters noise, compresses dynamic range  
+2. **Transcription**: Uses OpenAI Whisper to convert speech to text  
+3. **Organization**: Saves results in organized folders
 
-### Installing Docker
+## Setup
 
-Follow the instructions on the [official Docker website](https://docs.docker.com/get-docker/) to install Docker for your operating system.
+### Prerequisites
+- Python 3.8-3.11  
+- NVIDIA GPU recommended (but not required)  
+- FFmpeg
+
+### Installation
+
+1. **Create virtual environment**:
+```bash
+python -m venv whisper-env
+source whisper-env/bin/activate  # Linux/Mac
+# whisper-env\Scripts\activate   # Windows
+```
+
+2. **Install dependencies**:
+```bash
+pip install openai-whisper soundfile scipy numpy
+```
+
+3. **Install FFmpeg**:
+```bash
+# Ubuntu/Debian
+sudo apt install ffmpeg
+
+# MacOS
+brew install ffmpeg
+
+# Windows
+choco install ffmpeg
+```
+
+4. **Create directories**:
+```bash
+mkdir audio-files output
+```
 
 ## Usage
-To build the Docker image, use the following command:
 
+1. **Add WAV files** to `./audio-files/` folder
+
+2. **Run pipeline**:
 ```bash
-docker build -t openai-whisper .
+python process_audio_pipeline.py
 ```
 
-## Running OpenAI Whisper (GPU)
-To run OpenAI Whisper with the Docker image, you can use the following example command:
-
+3. **Check status**:
 ```bash
-docker run --gpus all -it -v ${PWD}/models:/root/.cache/whisper -v ${PWD}/audio-files:/app openai-whisper whisper audio-file.mp3 --device cuda --model turbo --language Italian --output_dir /app --output_format txt
+python process_audio_pipeline.py status
 ```
 
-This command utilizes GPU acceleration (--gpus all), mounts the local directories for Whisper models and audio files, and specifies the input audio file, output directory, language, and other relevant parameters.
+## Output
 
-### Choosing the Right Model  
+- Enhanced audio: `./audio-files/processed/`  
+- Transcriptions: `./output/[filename]/`
 
-Whisper supports multiple models with varying resource requirements and performance levels.  
+## Models
 
-- **`large-v3`**:  
-  The most accurate model, but it requires substantial VRAM (10–15 GB). Recommended for powerful GPUs with sufficient memory.  
+The pipeline uses `large-v3` by default. To use a faster model, edit line 24 in the script:
 
-- **`turbo`**:  
-  A more memory-efficient alternative to `large-v3`, offering near-comparable accuracy. This is suitable for GPUs with limited VRAM (e.g., 8 GB VRAM).  
+- `turbo` - Fast, good accuracy (~6GB VRAM)  
+- `medium` - Balanced (~5GB VRAM)  
+- `small` - Lightweight (~2GB VRAM)
 
-## Running OpenAI Whisper (CPU)
-
-If you do not have a GPU or want to run without GPU acceleration, you can omit the --gpus all flag from the command. For example:
-```bash
-docker run -it -v ${PWD}/models:/root/.cache/whisper -v ${PWD}/audio-files:/app openai-whisper whisper audio-file.mp3 --model turbo --language Italian --output_dir /app --output_format txt
+## Directory Structure
 ```
-
-### Additional Commands
-You can also check the GPU information using the following command:
-
-```bash
-docker run --gpus all -it openai-whisper nvidia-smi
+./
+├── audio-files/          # Put WAV files here
+│   └── processed/        # Enhanced audio (auto-created)
+├── output/               # Transcription results
+├── process_audio_pipeline.py
+└── normalize_simple.py
 ```
-## References
-- [OpenAI Whisper GitHub Repository](https://github.com/openai/whisper)
-
-- [NVIDIA Container Toolkit Installation Guide](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html)
-
-- [Docker Official Website](https://docs.docker.com/get-docker/)
-
-Feel free to explore and adapt this Docker image based on your specific use case and requirements. For more details on OpenAI Whisper and its usage, refer to the official documentation.
