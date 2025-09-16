@@ -15,7 +15,9 @@ An automated pipeline that processes WAV audio files through enhancement and tra
 - NVIDIA GPU recommended (but not required)  
 - FFmpeg
 
-### Installation
+The pipeline runs as a regular Python process. Docker is only used if you want to invoke the Whisper CLI inside a container rather than through the locally installed Python package.
+
+### Installation (local Python)
 
 1. **Create virtual environment**:
 ```bash
@@ -26,7 +28,7 @@ source whisper-env/bin/activate  # Linux/Mac
 
 2. **Install dependencies**:
 ```bash
-pip install openai-whisper soundfile scipy numpy
+pip install -r requirements.txt
 ```
 
 3. **Install FFmpeg**:
@@ -65,13 +67,33 @@ python process_audio_pipeline.py status
 - Enhanced audio: `./audio-files/processed/`  
 - Transcriptions: `./output/[filename]/`
 
+## Docker Usage (optional)
+
+The included `Dockerfile` builds an image that only contains the Whisper CLI. You can use it if you prefer to run transcription inside a container while still running the Python preprocessing locally.
+
+```bash
+# Build the image
+docker build -t whisper-cli .
+
+# Run Whisper against a processed file
+docker run --rm \
+  -v "$PWD/audio-files/processed":/audio \
+  -v "$PWD/output":/out \
+  whisper-cli --model large-v3 /audio/myfile_enhanced_norm.wav --output_dir /out
+```
+
+When using the pipeline end-to-end (`python process_audio_pipeline.py`), Whisper will be loaded from your local Python environment instead of Docker.
+
 ## Models
 
-The pipeline uses `large-v3` by default. To use a faster model, edit line 24 in the script:
+The pipeline defaults to `medium.en`, but you can pick any Whisper model at runtime:
 
-- `turbo` - Fast, good accuracy (~6GB VRAM)  
-- `medium` - Balanced (~5GB VRAM)  
-- `small` - Lightweight (~2GB VRAM)
+- `tiny`, `base`, `small` (and their `.en` variants) – lightweight, fastest  
+- `medium`, `medium.en` – balanced accuracy (~5 GB VRAM)  
+- `large-v3`, `large-v3-turbo` – highest accuracy (~10 GB VRAM)  
+- `turbo` – very fast multilingual model
+
+Override with `--model`, e.g. `python process_audio_pipeline.py --model large-v3`.
 
 ## Directory Structure
 ```
