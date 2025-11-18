@@ -11,7 +11,7 @@ import sys
 from pathlib import Path
 
 class AudioProcessingPipeline:
-    def __init__(self, audio_dir="./audio-files", output_dir="./output", model_name="medium.en"):
+    def __init__(self, audio_dir="./audio-files", output_dir="./output", model_name="large-v3"):
         self.audio_dir = Path(audio_dir)
         self.output_dir = Path(output_dir)
         self.processed_dir = self.audio_dir / "processed"
