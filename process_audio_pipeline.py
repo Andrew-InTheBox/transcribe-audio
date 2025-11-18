@@ -231,7 +231,7 @@ def parse_args(args):
     parser.add_argument(
         "-m",
         "--model",
-        default="medium.en",
+        default="large-v3",
         help="Whisper model name (e.g. 'medium.en', 'medium', 'large-v3', 'turbo')",
     )
     parsed = parser.parse_args(args)
