@@ -31,6 +31,27 @@ source whisper-env/bin/activate  # Linux/Mac
 pip install -r requirements.txt
 ```
 
+3. **(Optional) Enable NVIDIA GPU (CUDA) for faster transcription**:
+
+By default, `pip install -r requirements.txt` may install CPU-only PyTorch. To use your NVIDIA GPU, install a CUDA build of PyTorch in the same venv.
+
+```bash
+# Windows (PowerShell) - CUDA 12.8 build
+python -m pip uninstall -y torch torchvision torchaudio
+python -m pip install torch==2.9.1 torchvision==0.24.1 torchaudio==2.9.1 --index-url https://download.pytorch.org/whl/cu128
+```
+
+If you have older NVIDIA drivers, use CUDA 12.6 instead:
+```bash
+python -m pip uninstall -y torch torchvision torchaudio
+python -m pip install torch==2.9.1 torchvision==0.24.1 torchaudio==2.9.1 --index-url https://download.pytorch.org/whl/cu126
+```
+
+Verify CUDA is active:
+```bash
+python -c "import torch; print('cuda available:', torch.cuda.is_available()); print('gpu:', torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'none')"
+```
+
 3. **Install FFmpeg**:
 ```bash
 # Ubuntu/Debian
