@@ -10,6 +10,9 @@
 
 *.log
 
+__pycache__/
+*.pyc
+
 CLAUDE.md
 .vscode/
 

@@ -87,35 +87,46 @@ def normalize_audio_enhanced(input_file, output_file=None, target_db=-6.0,
     print(f"Target RMS: {target_db} dB")
     print(f"Base gain factor: {base_gain:.2f}")
     
-    # Process file in chunks
+    # Apply the high-pass filter to the whole file in one pass. filtfilt is a
+    # zero-phase filter that needs signal context on both sides of each sample;
+    # running it on isolated 5-second chunks (the old approach) restarted the
+    # filter at every boundary and produced audible artifacts every 5 seconds.
+    if enable_hpf:
+        print("Applying high-pass filter to full signal...")
+        full_audio, _ = sf.read(input_file)
+        full_audio = apply_high_pass_filter(full_audio, info.samplerate)
+    else:
+        full_audio = None
+
+    # Process file in chunks for the remaining (memoryless, per-sample) steps
     chunk_size = 44100 * 5  # 5 seconds for better processing
-    
-    with sf.SoundFile(output_file, 'w', samplerate=info.samplerate, 
+
+    with sf.SoundFile(output_file, 'w', samplerate=info.samplerate,
                       channels=info.channels, subtype='PCM_16') as output:
-        
+
         total_chunks = (info.frames + chunk_size - 1) // chunk_size
-        
+
         for chunk_idx, start in enumerate(range(0, info.frames, chunk_size)):
             if chunk_idx % 20 == 0:  # Progress indicator
                 print(f"Processing chunk {chunk_idx + 1}/{total_chunks}...")
-            
+
             frames_to_read = min(chunk_size, info.frames - start)
-            chunk, _ = sf.read(input_file, start=start, frames=frames_to_read)
-            
-            # Apply high-pass filter to remove low-frequency noise
-            if enable_hpf:
-                chunk = apply_high_pass_filter(chunk, info.samplerate)
-            
+
+            if full_audio is not None:
+                chunk = full_audio[start:start + frames_to_read]
+            else:
+                chunk, _ = sf.read(input_file, start=start, frames=frames_to_read)
+
             # Apply base gain
             chunk = chunk * base_gain
-            
+
             # Apply soft compression to control dynamics
             if enable_compression:
                 chunk = soft_compress(chunk, threshold=0.6, ratio=2.5)
-            
+
             # Final safety limiter (soft clipping)
             chunk = np.tanh(chunk * 0.95) * 0.95
-            
+
             output.write(chunk)
     
     # Verify result

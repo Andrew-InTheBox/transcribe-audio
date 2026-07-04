@@ -10,6 +10,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+VIDEO_EXTENSIONS = (".mp4", ".mov", ".mkv", ".avi", ".webm", ".m4v")
+
 class AudioProcessingPipeline:
     def __init__(self, audio_dir="./audio-files", output_dir="./output", model_name="large-v3"):
         self.audio_dir = Path(audio_dir)
@@ -17,10 +19,53 @@ class AudioProcessingPipeline:
         self.processed_dir = self.audio_dir / "processed"
         self.model = None
         self.model_name = model_name
-        
+
         # Create directories if they don't exist
         self.output_dir.mkdir(exist_ok=True)
         self.processed_dir.mkdir(exist_ok=True)
+
+    def find_new_video_files(self):
+        """Find video files that haven't had their audio extracted yet."""
+        video_files = [
+            f for f in self.audio_dir.iterdir()
+            if f.is_file() and f.suffix.lower() in VIDEO_EXTENSIONS
+        ]
+
+        new_files = []
+        for video_file in video_files:
+            extracted_file = self.audio_dir / f"{video_file.stem}.wav"
+            if not extracted_file.exists():
+                new_files.append(video_file)
+
+        return new_files
+
+    def extract_audio_from_video(self, video_file):
+        """Use ffmpeg to extract a WAV audio track from a video file."""
+        print(f"Extracting audio from video: {video_file.name}")
+
+        output_file = self.audio_dir / f"{video_file.stem}.wav"
+
+        cmd = [
+            "ffmpeg", "-y",
+            "-i", str(video_file),
+            "-vn",
+            "-acodec", "pcm_s16le",
+            "-ar", "16000",
+            "-ac", "1",
+            str(output_file),
+        ]
+
+        try:
+            subprocess.run(cmd, check=True, capture_output=True, text=True)
+            print(f"Audio extraction completed: {output_file}")
+            return output_file
+        except FileNotFoundError:
+            print("Error: ffmpeg not found. Install ffmpeg and ensure it's on your PATH.")
+            return None
+        except subprocess.CalledProcessError as e:
+            print(f"Error extracting audio from {video_file.name}: {e}")
+            print(f"Error output: {e.stderr}")
+            return None
     
     def _load_model(self):
         """Load Whisper model with error handling."""
@@ -121,8 +166,25 @@ class AudioProcessingPipeline:
             print(f"Error running Whisper transcription: {e}")
             return None
     
-    def process_all_files(self):
-        """Process all new WAV files in the pipeline."""
+    def process_all_files(self, normalize_only=False):
+        """Process all new video/WAV files in the pipeline."""
+        new_videos = self.find_new_video_files()
+        extraction_failures = 0
+
+        if new_videos:
+            print(f"Found {len(new_videos)} new video file(s) to extract audio from:")
+            for video_file in new_videos:
+                print(f"  - {video_file.name}")
+
+            for video_file in new_videos:
+                print(f"\n{'='*60}")
+                print(f"Extracting audio: {video_file.name}")
+                print(f"{'='*60}")
+
+                if not self.extract_audio_from_video(video_file):
+                    print(f"Failed to extract audio from {video_file.name}, skipping...")
+                    extraction_failures += 1
+
         new_files = self.find_new_wav_files()
         pending_transcriptions = self.find_pending_transcriptions()
 
@@ -139,6 +201,9 @@ class AudioProcessingPipeline:
 
         if pending_transcriptions:
             print(f"Found {len(pending_transcriptions)} normalized files awaiting transcription.")
+
+        if normalize_only:
+            pending_transcriptions = []
 
         normalized_success = 0
         normalization_failures = 0
@@ -159,6 +224,9 @@ class AudioProcessingPipeline:
 
             normalized_success += 1
             processed_this_run.add(normalized_file)
+
+            if normalize_only:
+                continue
 
             output_dir = self.run_whisper_transcription(normalized_file)
             if not output_dir:
@@ -188,8 +256,13 @@ class AudioProcessingPipeline:
 
         print(f"\n{'='*60}")
         print("Pipeline completed:")
+        if new_videos:
+            print(f"  - Videos with audio extracted: {len(new_videos) - extraction_failures} files")
         print(f"  - Newly normalized: {normalized_success} files")
-        print(f"  - Transcribed: {transcription_success} files")
+        if not normalize_only:
+            print(f"  - Transcribed: {transcription_success} files")
+        if extraction_failures:
+            print(f"  - Extraction failures: {extraction_failures}")
         if normalization_failures:
             print(f"  - Normalization failures: {normalization_failures}")
         if transcription_failures:
@@ -199,22 +272,37 @@ class AudioProcessingPipeline:
     
     def list_status(self):
         """Show status of files in the pipeline."""
+        video_files = [
+            f for f in self.audio_dir.iterdir()
+            if f.is_file() and f.suffix.lower() in VIDEO_EXTENSIONS
+        ]
+
+        if video_files:
+            print("Video files status:")
+            print(f"{'File':<30} {'Extracted':<12}")
+            print("-" * 42)
+            for video_file in video_files:
+                extracted_file = self.audio_dir / f"{video_file.stem}.wav"
+                extracted_status = "yes" if extracted_file.exists() else "no"
+                print(f"{video_file.name:<30} {extracted_status:<12}")
+            print()
+
         wav_files = list(self.audio_dir.glob("*.wav"))
-        
+
         if not wav_files:
             print("No WAV files found in audio-files directory.")
             return
-        
+
         print(f"Audio files status:")
         print(f"{'File':<30} {'Normalized':<12} {'Transcribed':<12}")
         print("-" * 54)
-        
+
         for wav_file in wav_files:
             normalized_file = self.processed_dir / f"{wav_file.stem}_enhanced_norm.wav"
             output_dir = self.output_dir / f"{wav_file.stem}_enhanced_norm"
             
-            normalized_status = "✓" if normalized_file.exists() else "✗"
-            transcribed_status = "✓" if output_dir.exists() and any(output_dir.glob("*.txt")) else "✗"
+            normalized_status = "yes" if normalized_file.exists() else "no"
+            transcribed_status = "yes" if output_dir.exists() and any(output_dir.glob("*.txt")) else "no"
             
             print(f"{wav_file.name:<30} {normalized_status:<12} {transcribed_status:<12}")
 
@@ -234,6 +322,11 @@ def parse_args(args):
         default="large-v3",
         help="Whisper model name (e.g. 'medium.en', 'medium', 'large-v3', 'turbo')",
     )
+    parser.add_argument(
+        "--normalize-only",
+        action="store_true",
+        help="Only extract/normalize audio; skip Whisper transcription",
+    )
     parsed = parser.parse_args(args)
     return parser, parsed
 
@@ -247,14 +340,17 @@ def main():
         print("Audio Processing Pipeline")
         print("Usage:")
         print("  python process_audio_pipeline.py [--model MODEL]")
+        print("  python process_audio_pipeline.py --normalize-only")
         print("  python process_audio_pipeline.py status [--model MODEL]")
         print("  python process_audio_pipeline.py help")
         print("")
         print("Pipeline process:")
-        print("1. Finds new .wav files in ./audio-files/")
-        print("2. Normalizes audio using normalize_simple.py")
-        print("3. Runs Whisper transcription with the selected model")
-        print("4. Outputs results to ./output/[filename]/")
+        print("1. Finds new video files (.mp4, .mov, .mkv, .avi, .webm, .m4v) in ./audio-files/")
+        print("   and extracts their audio to .wav using ffmpeg")
+        print("2. Finds new .wav files in ./audio-files/")
+        print("3. Normalizes audio using normalize_simple.py")
+        print("4. Runs Whisper transcription with the selected model")
+        print("5. Outputs results to ./output/[filename]/")
         print("")
         print("Examples:")
         print("  python process_audio_pipeline.py --model medium.en")
@@ -269,7 +365,7 @@ def main():
     if command == "status":
         pipeline.list_status()
     else:
-        pipeline.process_all_files()
+        pipeline.process_all_files(normalize_only=parsed_args.normalize_only)
 
 if __name__ == "__main__":
     main()
